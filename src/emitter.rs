@@ -190,6 +190,32 @@ impl<'a> YamlEmitter<'a> {
         if v.is_empty() {
             write!(self.writer, "[]")?;
         } else {
+            // Sort it if element is a map with `name` key.
+            if let Yaml::Hash(map) = &v[0] {
+                let name_key = Yaml::String("name".to_owned());
+                if map.contains_key(&name_key) {
+                    let mut copy: Vec<Yaml> = v.iter().cloned().collect();
+                    copy.sort_by_key(|element| {
+                        if let Yaml::Hash(map) = element {
+                            if let Some(Yaml::String(name)) = map.get(&name_key) {
+                                return Some(name.clone());
+                            }
+                        }
+                        None
+                    });
+                    self.level += 1;
+                    for (cnt, x) in v.iter().enumerate() {
+                        if cnt > 0 {
+                            writeln!(self.writer)?;
+                            self.write_indent()?;
+                        }
+                        write!(self.writer, "-")?;
+                        self.emit_val(true, x)?;
+                    }
+                    self.level -= 1;
+                    return Ok(());
+                }
+            }
             self.level += 1;
             for (cnt, x) in v.iter().enumerate() {
                 if cnt > 0 {
