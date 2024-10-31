@@ -253,7 +253,7 @@ impl<'a> YamlEmitter<'a> {
                     assert!(has_name);
                     met_name = true;
                     continue;
-                } else if !met_name {
+                } else if has_name && !met_name {
                     cnt += 1;
                 }
                 if cnt > 0 {
