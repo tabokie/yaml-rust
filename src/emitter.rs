@@ -235,11 +235,27 @@ impl<'a> YamlEmitter<'a> {
             self.writer.write_str("{}")?;
         } else {
             self.level += 1;
-            for (cnt, (k, v)) in h.iter().enumerate() {
+            let mut has_name = false;
+            let name_key = Yaml::String("name".to_owned());
+            if let Some(v) = h.get(&name_key) {
+                self.emit_node(&name_key)?;
+                write!(self.writer, ":")?;
+                self.emit_val(false, v)?;
+                has_name = true;
+            }
+            let mut met_name = false;
+            for (mut cnt, (k, v)) in h.iter().enumerate() {
                 let complex_key = match *k {
                     Yaml::Hash(_) | Yaml::Array(_) => true,
                     _ => false,
                 };
+                if k == &name_key {
+                    assert!(has_name);
+                    met_name = true;
+                    continue;
+                } else if !met_name {
+                    cnt += 1;
+                }
                 if cnt > 0 {
                     writeln!(self.writer)?;
                     self.write_indent()?;
