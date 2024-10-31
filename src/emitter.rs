@@ -204,7 +204,7 @@ impl<'a> YamlEmitter<'a> {
                         None
                     });
                     self.level += 1;
-                    for (cnt, x) in v.iter().enumerate() {
+                    for (cnt, x) in copy.iter().enumerate() {
                         if cnt > 0 {
                             writeln!(self.writer)?;
                             self.write_indent()?;
