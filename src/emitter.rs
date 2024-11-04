@@ -36,6 +36,7 @@ pub struct YamlEmitter<'a> {
     compact: bool,
 
     level: isize,
+    sort: bool,
 }
 
 pub type EmitResult = Result<(), EmitError>;
@@ -110,6 +111,17 @@ impl<'a> YamlEmitter<'a> {
             best_indent: 2,
             compact: true,
             level: -1,
+            sort: false,
+        }
+    }
+
+    pub fn new_sorted(writer: &'a mut dyn fmt::Write) -> YamlEmitter {
+        YamlEmitter {
+            writer,
+            best_indent: 2,
+            compact: true,
+            level: -1,
+            sort: true,
         }
     }
 
@@ -192,7 +204,13 @@ impl<'a> YamlEmitter<'a> {
         } else {
             // Sort it if element is a map with `name` key.
             let mut copy = v.iter().cloned().collect::<Vec<_>>();
-            copy.sort();
+            if self.sort {
+                if let Some(first) = copy.first() {
+                    if first.sort_key().is_some() {
+                        copy.sort_by_cached_key(|k| k.sort_key());
+                    }
+                }
+            }
             self.level += 1;
             for (cnt, x) in copy.iter().enumerate() {
                 if cnt > 0 {
@@ -212,27 +230,50 @@ impl<'a> YamlEmitter<'a> {
             self.writer.write_str("{}")?;
         } else {
             self.level += 1;
-            let mut has_name = false;
-            let name_key = Yaml::String("name".to_owned());
-            if let Some(v) = h.get(&name_key) {
-                self.emit_node(&name_key)?;
-                write!(self.writer, ":")?;
-                self.emit_val(false, v)?;
-                has_name = true;
+            if self.sort {
+                let name_key = Yaml::String("name".to_owned());
+                let mut first_entry = true;
+                let mut h: std::collections::BTreeMap<_, _> = h.into_iter().collect();
+                if let Some(v) = h.remove(&name_key) {
+                    self.emit_node(&name_key)?;
+                    write!(self.writer, ":")?;
+                    self.emit_val(false, v)?;
+                    first_entry = false;
+                }
+                for (k, v) in h.iter() {
+                    if **k == name_key {
+                        continue;
+                    }
+                    let complex_key = match *k {
+                        Yaml::Hash(_) | Yaml::Array(_) => true,
+                        _ => false,
+                    };
+                    if !first_entry {
+                        writeln!(self.writer)?;
+                        self.write_indent()?;
+                    }
+                    if complex_key {
+                        write!(self.writer, "?")?;
+                        self.emit_val(true, k)?;
+                        writeln!(self.writer)?;
+                        self.write_indent()?;
+                        write!(self.writer, ":")?;
+                        self.emit_val(true, v)?;
+                    } else {
+                        self.emit_node(k)?;
+                        write!(self.writer, ":")?;
+                        self.emit_val(false, v)?;
+                    }
+                    first_entry = false;
+                }
+                self.level -= 1;
+                return Ok(());
             }
-            let mut met_name = false;
-            for (mut cnt, (k, v)) in h.iter().enumerate() {
+            for (cnt, (k, v)) in h.iter().enumerate() {
                 let complex_key = match *k {
                     Yaml::Hash(_) | Yaml::Array(_) => true,
                     _ => false,
                 };
-                if k == &name_key {
-                    assert!(has_name);
-                    met_name = true;
-                    continue;
-                } else if has_name && !met_name {
-                    cnt += 1;
-                }
                 if cnt > 0 {
                     writeln!(self.writer)?;
                     self.write_indent()?;

@@ -25,7 +25,7 @@ use std::vec;
 ///     assert!(v.as_i64().is_some());
 /// }
 /// ```
-#[derive(Clone, PartialEq, Debug, Eq, Hash)]
+#[derive(Clone, PartialEq, PartialOrd, Debug, Eq, Ord, Hash)]
 pub enum Yaml {
     /// Float types are stored as String and parsed on demand.
     /// Note that f64 does NOT implement Eq trait and can NOT be stored in BTreeMap.
@@ -52,79 +52,26 @@ pub enum Yaml {
     BadValue,
 }
 
-impl Ord for Yaml {
-    fn cmp(&self, other: &Yaml) -> std::cmp::Ordering {
-        match (self, other) {
-            (&Yaml::Real(ref a), &Yaml::Real(ref b)) => a.cmp(b),
-            (&Yaml::Integer(ref a), &Yaml::Integer(ref b)) => a.cmp(b),
-            (&Yaml::String(ref a), &Yaml::String(ref b)) => a.cmp(b),
-            (&Yaml::Boolean(ref a), &Yaml::Boolean(ref b)) => a.cmp(b),
-            (&Yaml::Array(ref a), &Yaml::Array(ref b)) => {
-                let mut a_copy = a.clone();
-                let mut b_copy = b.clone();
-                a_copy.sort();
-                b_copy.sort();
-                a_copy.cmp(&b_copy)
-            }
-            (&Yaml::Hash(ref a), &Yaml::Hash(ref b)) => {
-                let name_key = Yaml::String("name".to_string());
-                if let Some(a_name) = a.get(&name_key) {
-                    if let Some(b_name) = b.get(&name_key) {
-                        if let Some(a_name_str) = a_name.as_str() {
-                            if let Some(b_name_str) = b_name.as_str() {
-                                if a_name_str != b_name_str {
-                                    return a_name_str.cmp(b_name_str);
-                                }
-                            }
-                        }
-                        let region_key = Yaml::String("region".to_string());
-                        if let Some(a_region) = a.get(&region_key) {
-                            if let Some(b_region) = b.get(&region_key) {
-                                if let Some(a_region_str) = a_region.as_str() {
-                                    if let Some(b_region_str) = b_region.as_str() {
-                                        if a_region_str != b_region_str {
-                                            return a_region_str.cmp(b_region_str);
-                                        }
-                                    }
-                                }
-                            }
+impl Yaml {
+    pub fn sort_key(&self) -> Option<String> {
+        if let Yaml::Hash(ref h) = *self {
+            if let Some(name) = h.get(&Yaml::String("name".to_string())) {
+                if let Some(name_str) = name.as_str() {
+                    if let Some(region) = h.get(&Yaml::String("region".to_string())) {
+                        if let Some(region_str) = region.as_str() {
+                            return Some(format!("{}-{}", name_str, region_str));
                         }
                     }
+                    return Some(name_str.to_string());
                 }
-                a.cmp(b)
             }
-            (&Yaml::Alias(ref a), &Yaml::Alias(ref b)) => a.cmp(b),
-            (&Yaml::Null, &Yaml::Null) => std::cmp::Ordering::Equal,
-            (&Yaml::BadValue, &Yaml::BadValue) => std::cmp::Ordering::Equal,
-            (&Yaml::Real(_), _) => std::cmp::Ordering::Less,
-            (_, &Yaml::Real(_)) => std::cmp::Ordering::Greater,
-            (&Yaml::Integer(_), _) => std::cmp::Ordering::Less,
-            (_, &Yaml::Integer(_)) => std::cmp::Ordering::Greater,
-            (&Yaml::String(_), _) => std::cmp::Ordering::Less,
-            (_, &Yaml::String(_)) => std::cmp::Ordering::Greater,
-            (&Yaml::Boolean(_), _) => std::cmp::Ordering::Less,
-            (_, &Yaml::Boolean(_)) => std::cmp::Ordering::Greater,
-            (&Yaml::Array(_), _) => std::cmp::Ordering::Less,
-            (_, &Yaml::Array(_)) => std::cmp::Ordering::Greater,
-            (&Yaml::Hash(_), _) => std::cmp::Ordering::Less,
-            (_, &Yaml::Hash(_)) => std::cmp::Ordering::Greater,
-            (&Yaml::Alias(_), _) => std::cmp::Ordering::Less,
-            (_, &Yaml::Alias(_)) => std::cmp::Ordering::Greater,
-            (&Yaml::Null, _) => std::cmp::Ordering::Less,
-            (_, &Yaml::Null) => std::cmp::Ordering::Greater,
         }
-    }
-}
-
-impl PartialOrd for Yaml {
-    fn partial_cmp(&self, other: &Yaml) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
+        None
     }
 }
 
 pub type Array = Vec<Yaml>;
-// pub type Hash = LinkedHashMap<Yaml, Yaml>;
-pub type Hash = BTreeMap<Yaml, Yaml>;
+pub type Hash = LinkedHashMap<Yaml, Yaml>;
 
 // parse f64 as Core schema
 // See: https://github.com/chyh1990/yaml-rust/issues/51
